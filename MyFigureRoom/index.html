@@ -147,6 +147,61 @@
             <div id="figs" style="position: absolute; inset: 0"></div>
           </div>
         </div>
+        <div class="slide" id="s3">
+          <svg
+            id="wsvg"
+            viewBox="0 0 1600 900"
+            preserveAspectRatio="none"
+            role="img"
+            aria-label="Poster wall"
+          >
+            <defs>
+              <linearGradient id="ww" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stop-color="#e6ddf9" />
+                <stop offset="1" stop-color="#f8d7e8" />
+              </linearGradient>
+              <radialGradient id="wg" cx=".5" cy=".42" r=".65">
+                <stop offset="0" stop-color="#fff" stop-opacity=".75" />
+                <stop offset="1" stop-color="#fff" stop-opacity="0" />
+              </radialGradient>
+              <pattern id="wdots" width="64" height="64" patternUnits="userSpaceOnUse">
+                <circle cx="16" cy="16" r="3" fill="#fff" opacity=".55" />
+                <circle cx="48" cy="48" r="3" fill="#fff" opacity=".55" />
+              </pattern>
+            </defs>
+            <rect width="1600" height="900" fill="url(#ww)" />
+            <rect width="1600" height="650" fill="url(#wdots)" />
+            <ellipse cx="800" cy="320" rx="720" ry="380" fill="url(#wg)" />
+            <rect class="fl" y="650" width="1600" height="250" />
+            <path class="pl" d="M0 720h1600M0 790h1600M0 860h1600" fill="none" />
+            <rect class="bs" y="636" width="1600" height="18" />
+            <path
+              d="M-20 30Q400 110 800 40T1620 40"
+              class="yl"
+              stroke="#ffd36b"
+              stroke-width="12"
+              stroke-linecap="round"
+              stroke-dasharray="0 52"
+              fill="none"
+            />
+            <g>
+              <path
+                class="gr"
+                d="M60 850c-40-50-30-110-10-150 14 50 30 90 10 150zM80 850c0-70 20-120 50-150 6 60-6 110-50 150z"
+              />
+              <path class="pk" d="M40 820h64l-10 50H50z" />
+            </g>
+            <g>
+              <path
+                class="gr2"
+                d="M1540 850c-40-50-30-110-10-150 14 50 30 90 10 150zM1560 850c0-70 20-120 50-150 6 60-6 110-50 150z"
+              />
+              <path class="yl" d="M1520 820h64l-10 50h-44z" />
+            </g>
+          </svg>
+          <div id="posts" style="position: absolute; inset: 0"></div>
+          <div id="whint" hidden>Drag items from the box onto the wall to pin them up.</div>
+        </div>
       </div>
       <button class="arrow l" id="L" aria-label="Go to bedroom">
         <svg viewBox="0 0 64 110"><path d="M46 12L16 55l30 43" /></svg>

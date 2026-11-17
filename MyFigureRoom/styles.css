@@ -43,16 +43,19 @@ body {
 #stage {
   position: absolute;
   inset: 0;
-  width: 200%;
+  width: 300%;
   display: flex;
   transition: transform 1s cubic-bezier(0.65, 0, 0.35, 1);
 }
 #stage.right {
-  transform: translateX(-50%);
+  transform: translateX(-33.3333%);
+}
+#stage.wall {
+  transform: translateX(-66.6667%);
 }
 .slide {
   position: relative;
-  width: 50%;
+  width: 33.3333%;
   height: 100%;
   transition: transform 1s cubic-bezier(0.6, 0, 0.3, 1);
 }
@@ -1081,4 +1084,168 @@ button.p {
     animation: none;
     opacity: 0;
   }
+}
+
+#whint {
+  position: absolute;
+  left: 50%;
+  top: 40%;
+  transform: translate(-50%, -50%);
+  max-width: 60%;
+  text-align: center;
+  font-size: 1.7cqw;
+  font-weight: 700;
+  color: var(--ink);
+  opacity: 0.55;
+  pointer-events: none;
+}
+#whint[hidden] {
+  display: none;
+}
+.fig.post {
+  transform: translate(-50%, -50%);
+}
+.fig.post img {
+  filter: drop-shadow(1px 3px 3px #4f406850);
+  transform: rotate(var(--tilt, 0deg));
+  transform-origin: 50% 1.5cqw;
+  transition:
+    transform 0.18s ease,
+    filter 0.18s ease;
+}
+.fig.post.lift img {
+  transform: scale(1.05) rotate(-1.5deg);
+  filter: drop-shadow(0 1.1cqw 1cqw #4f406845);
+}
+.fig.post.tap img {
+  animation: postslap 0.62s ease both;
+}
+@keyframes postslap {
+  0%,
+  38% {
+    transform: scale(1.05) rotate(-1.5deg);
+  }
+  56% {
+    transform: scale(0.975) rotate(var(--tilt, 0deg));
+  }
+  76% {
+    transform: scale(1.008) rotate(var(--tilt, 0deg));
+  }
+  100% {
+    transform: scale(1) rotate(var(--tilt, 0deg));
+  }
+}
+.pin {
+  position: absolute;
+  left: 50%;
+  top: 1.5cqw;
+  width: 2.7cqw;
+  height: 2.7cqw;
+  margin: -1.35cqw 0 0 -1.35cqw;
+  z-index: 2;
+  pointer-events: none;
+}
+.pin svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+.pin .pa {
+  fill: var(--pd);
+}
+.pin .pb {
+  fill: var(--pc);
+}
+.pin .pd {
+  opacity: 0.28;
+}
+.pin .ph {
+  fill: #fff;
+  opacity: 0.65;
+}
+.pin-sh {
+  position: absolute;
+  inset: 6%;
+  border-radius: 50%;
+  background: #4f406859;
+  filter: blur(1px);
+  transform: translate(0.3cqw, 0.5cqw);
+}
+.pin-ring {
+  position: absolute;
+  inset: -25%;
+  border-radius: 50%;
+  border: 0.2cqw solid var(--pc);
+  opacity: 0;
+}
+.pin.drop {
+  animation: pindrop 0.62s cubic-bezier(0.25, 0.6, 0.35, 1) both;
+}
+.pin.drop .pin-sh {
+  animation: pinshadow 0.62s ease-out both;
+}
+.pin.drop .pin-ring {
+  animation: pinring 0.5s 0.3s ease-out both;
+}
+@keyframes pindrop {
+  0% {
+    opacity: 0;
+    transform: translateY(-3.2cqw) scale(2.6) rotate(-24deg);
+  }
+  18% {
+    opacity: 1;
+  }
+  52% {
+    opacity: 1;
+    transform: translateY(0) scale(1.25) rotate(-6deg);
+  }
+  68% {
+    transform: translateY(0.1cqw) scale(0.86) rotate(1deg);
+  }
+  84% {
+    transform: scale(1.06);
+  }
+  100% {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes pinshadow {
+  0% {
+    opacity: 0;
+    transform: translate(2.6cqw, 3.6cqw) scale(1.8);
+  }
+  52% {
+    opacity: 0.6;
+    transform: translate(0.7cqw, 0.9cqw) scale(1.1);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0.3cqw, 0.5cqw);
+  }
+}
+@keyframes pinring {
+  0% {
+    opacity: 0.9;
+    transform: scale(0.5);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.9);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pin.drop,
+  .pin.drop .pin-sh,
+  .pin.drop .pin-ring,
+  .fig.post.tap img {
+    animation: none;
+  }
+}
+
+#wempty[hidden] {
+  display: none;
 }

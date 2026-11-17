@@ -5,13 +5,14 @@ let D = {
     figures: [],
     orders: [],
     shelf: { figures: [] },
+    wall: { items: [] },
     over: {},
     scales: {},
   },
   sel = null,
   pc = false,
   page = 0,
-  right = false,
+  view = 1,
   vy = 0,
   lastDown = 0;
 const $ = (s) => document.querySelector(s);
@@ -29,6 +30,7 @@ let warned = false;
 if (!D.scales || typeof D.scales !== "object") D.scales = {};
 if (!D.shelf || !Array.isArray(D.shelf.figures)) D.shelf = { figures: [] };
 if (!D.over) D.over = {};
+if (!D.wall || !Array.isArray(D.wall.items)) D.wall = { items: [] };
 if (!D.rowsReset3) {
   D.rowsReset3 = true;
   if (D.rows > 3) {
@@ -55,22 +57,25 @@ function save() {
   }
 }
 const room = $("#room");
-function go(r) {
-  right = r;
-  $("#stage").classList.toggle("right", r);
-  $("#box").classList.toggle("on", r);
-  if (!r) {
-    sel = null;
-    closeBoxModal();
-  }
-  $("#panel").classList.toggle("on", r && !!sel);
-  $("#L").style.display = r ? "" : "none";
-  $("#R").style.display = r ? "none" : "";
+function go(v) {
+  view = v;
+  const st = $("#stage");
+  st.classList.toggle("right", v === 1);
+  st.classList.toggle("wall", v === 2);
+  $("#box").classList.toggle("on", v >= 1);
+  sel = null;
+  closeBoxModal();
+  $("#panel").classList.toggle("on", false);
+  $("#L").style.display = v > 0 ? "" : "none";
+  $("#R").style.display = v < 2 ? "" : "none";
+  $("#L").setAttribute("aria-label", v === 2 ? "Go to shelf" : "Go to bedroom");
+  $("#R").setAttribute("aria-label", v === 0 ? "Go to shelf" : "Go to poster wall");
+  $("#R").title = v === 0 ? "Go to shelf" : "Pin posters on the wall";
   render();
   updateV();
 }
-$("#L").onclick = () => go(false);
-$("#R").onclick = () => go(true);
+$("#L").onclick = () => go(Math.max(0, view - 1));
+$("#R").onclick = () => go(Math.min(2, view + 1));
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && modalOpen()) {
     e.preventDefault();
@@ -81,14 +86,14 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     if ($("#wish").classList.contains("on")) wake();
     else if (pc) pcOff();
-    else if (right && sel) clearSel();
+    else if (view >= 1 && sel) clearSel();
     return;
   }
   if (pc || $("#wish").classList.contains("on")) return;
-  if (right && e.key === "ArrowUp") setV(vy - STEP);
-  if (right && e.key === "ArrowDown") setV(vy + STEP);
-  if (e.key === "ArrowLeft") go(false);
-  if (e.key === "ArrowRight") go(true);
+  if (view === 1 && e.key === "ArrowUp") setV(vy - STEP);
+  if (view === 1 && e.key === "ArrowDown") setV(vy + STEP);
+  if (e.key === "ArrowLeft") go(Math.max(0, view - 1));
+  if (e.key === "ArrowRight") go(Math.min(2, view + 1));
 });
 ["bed", "pc"].forEach((id) => {
   const n = $("#" + id);
@@ -188,6 +193,7 @@ function applySync(j) {
   ];
   const own = new Set(j.owned.map((x) => x.id));
   D.shelf.figures = D.shelf.figures.filter((s) => own.has(s.fid));
+  D.wall.items = D.wall.items.filter((s) => own.has(s.fid));
   const tr = new Map(D.orders.map((o) => [o.id, o.tracking_id]));
   D.orders = j.ordered.map((o) => ({
     id: o.id,
@@ -339,9 +345,13 @@ $("#impf").onchange = async (e) => {
   try {
     const j = JSON.parse(await e.target.files[0].text());
     if (!j.figures || !j.shelf) throw 0;
-    D = Object.assign({ over: {}, orders: [], scales: {}, rows: 3 }, j);
+    D = Object.assign(
+      { over: {}, orders: [], scales: {}, rows: 3, wall: { items: [] } },
+      j,
+    );
     if (!D.scales || typeof D.scales !== "object") D.scales = {};
     if (!(D.rows >= 3)) D.rows = 3;
+    if (!D.wall || !Array.isArray(D.wall.items)) D.wall = { items: [] };
     vy = 0;
     save();
     drawShelf();
@@ -431,6 +441,151 @@ const STEP = 225,
 let SHELF = { hs: [STEP, STEP, STEP], surf: [772, 547, 322], extra: 0 };
 const figEl = (fid) => document.querySelector(`.fig[data-id="${fid}"]`);
 const fById = (id) => D.figures.find((f) => f.id === id);
+
+const WALL_BOTTOM = 624,
+  POST_H = 320,
+  PINS = [
+    ["#f58fb0", "#d4608a"],
+    ["#ffd36b", "#d9a52c"],
+    ["#7fd3b0", "#43a67d"],
+    ["#a392ea", "#7c63d6"],
+    ["#7cc4f2", "#3f94cc"],
+  ];
+const usedIds = () =>
+  new Set([...D.shelf.figures, ...D.wall.items].map((s) => s.fid));
+function aspectOf(fid) {
+  const a = String(ARC[fid] || "").split("/"),
+    r = +a[0] / +a[1];
+  return r > 0 && isFinite(r) ? r : 0.72;
+}
+function postH(s) {
+  return Math.round(
+    Math.min(POST_H * (s.scale || 1), 560, 1400 / aspectOf(s.fid)),
+  );
+}
+function hashId(fid) {
+  let h = 7;
+  for (const c of String(fid)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  return h;
+}
+const tiltOf = (fid) => ((hashId(fid) % 33) - 16) / 10;
+function makePin(fid) {
+  const [c, d] = PINS[(hashId(fid) >> 3) % PINS.length],
+    p = document.createElement("span");
+  p.className = "pin";
+  p.style.setProperty("--pc", c);
+  p.style.setProperty("--pd", d);
+  p.innerHTML =
+    '<i class="pin-sh"></i><svg viewBox="0 0 40 40" aria-hidden="true"><circle class="pa" cx="20" cy="20" r="18"/><circle class="pb" cx="20" cy="19" r="14.5"/><circle class="pa pd" cx="20" cy="19" r="6.5"/><ellipse class="ph" cx="14" cy="12.5" rx="5.5" ry="3.3" transform="rotate(-35 14 12.5)"/></svg><i class="pin-ring"></i>';
+  return p;
+}
+function pinIt(el, s, anim) {
+  el.querySelectorAll(".pin").forEach((n) => n.remove());
+  const p = makePin(s.fid);
+  el.appendChild(p);
+  if (anim) {
+    p.classList.add("drop");
+    el.classList.remove("tap");
+    void el.offsetWidth;
+    el.classList.add("tap");
+    setTimeout(() => el.classList.remove("tap"), 750);
+  }
+}
+function unpin(el, s) {
+  s.pinned = false;
+  el.querySelectorAll(".pin").forEach((n) => n.remove());
+  el.classList.add("lift");
+}
+function popIn(el) {
+  const a = el.classList.contains("post") ? "-50%,-50%" : "-50%,-100%";
+  el.animate(
+    [
+      { transform: `translate(${a}) scale(.7)`, opacity: 0.2 },
+      { transform: `translate(${a}) scale(1)`, opacity: 1 },
+    ],
+    { duration: 180 },
+  );
+}
+function addPlaced(f, x, y) {
+  if (view === 2) {
+    const s = {
+      fid: f.id,
+      x: clampX(x),
+      y: Math.max(0, Math.min(900, y)),
+      scale: 1,
+      pinned: false,
+    };
+    D.wall.items.push(s);
+    return s;
+  }
+  if (!D.scales[f.id]) D.scales[f.id] = scaleOf(f.id);
+  const s = { fid: f.id, x: clampX(x), y: clampY(y), scale: 1, row: null };
+  D.shelf.figures.push(s);
+  return s;
+}
+function clampPost(s) {
+  const h = postH(s),
+    w = h * aspectOf(s.fid);
+  s.x = Math.round(Math.max(w / 2 + 16, Math.min(1600 - w / 2 - 16, s.x)));
+  s.y = Math.round(Math.max(h / 2 + 20, Math.min(WALL_BOTTOM - h / 2, s.y)));
+  return h;
+}
+function placePost(el, s, h) {
+  el.style.left = s.x / 16 + "%";
+  el.style.top = s.y / 9 + "%";
+  el.style.height = h / 9 + "%";
+}
+function fitPost(el, s) {
+  if (!el || s.pinned === false) return;
+  placePost(el, s, clampPost(s));
+}
+function settleWall(s) {
+  const el = figEl(s.fid),
+    h = clampPost(s);
+  s.pinned = true;
+  if (el) {
+    el.classList.remove("lift");
+    el.style.transition = "left .2s ease, top .2s ease";
+    placePost(el, s, h);
+    setTimeout(() => (el.style.transition = ""), 260);
+    pinIt(el, s, true);
+  }
+  save();
+  updateBox();
+  renderPanel();
+}
+function fillPost(im, f, box, s) {
+  im.onload = () => {
+    ARC[f.id] = im.naturalWidth + "/" + im.naturalHeight;
+    box.style.aspectRatio = ARC[f.id];
+    fitPost(box, s);
+  };
+  im.src = thumb(f);
+}
+function renderWall() {
+  const box = $("#posts");
+  box.innerHTML = "";
+  D.wall.items.forEach((s) => {
+    const f = fById(s.fid);
+    if (!f) return;
+    const e = document.createElement("div");
+    e.className = "fig post" + (sel === s.fid ? " sel" : "");
+    e.dataset.id = s.fid;
+    e.title = f.name;
+    e.style.setProperty("--tilt", tiltOf(s.fid) + "deg");
+    e.style.aspectRatio = ARC[f.id] || "auto";
+    placePost(e, s, postH(s));
+    const im = new Image();
+    im.alt = f.name;
+    e.appendChild(im);
+    fillPost(im, f, e, s);
+    if (s.pinned !== false) e.appendChild(makePin(s.fid));
+    e.onpointerdown = (ev) => drag(ev, s, e);
+    box.appendChild(e);
+  });
+  $("#whint").hidden = D.wall.items.length > 0;
+}
+
 function parseScale(name) {
   const m = String(name || "").match(/(?:^|[^0-9])1\s*\/\s*(\d{1,3})(?![0-9])/);
   return m ? Math.max(1, +m[1]) : 0;
@@ -486,9 +641,9 @@ function setV(v) {
 }
 function updateV() {
   const top = vy <= -ext();
-  $("#U").style.display = right ? "" : "none";
+  $("#U").style.display = view === 1 ? "" : "none";
   $("#U .pls").style.display = top ? "" : "none";
-  $("#D").style.display = right && vy < 0 ? "" : "none";
+  $("#D").style.display = view === 1 && vy < 0 ? "" : "none";
 }
 $("#U").onclick = () => {
   if (vy <= -ext()) {
@@ -505,7 +660,7 @@ let wl = 0;
 $("#s2").addEventListener(
   "wheel",
   (e) => {
-    if (!right) return;
+    if (view !== 1) return;
     e.preventDefault();
     const t = Date.now();
     if (t - wl < 650) return;
@@ -527,7 +682,7 @@ function drawShelf() {
         `<rect class="bs" x="170" y="${y}" width="1260" height="18"/><rect x="170" y="${y + 18}" width="1260" height="12" fill="#4f406824"/>`,
     )
     .join("");
-  sv.innerHTML = `<rect x="0" y="${-e}" width="1600" height="${900 + e}" fill="url(#w)"/><rect class="fl" y="650" width="1600" height="250"/><path class="pl" d="M0 720h1600M0 790h1600M0 860h1600" fill="none"/><path d="M-20 ${50 - e}Q400 ${130 - e} 800 ${60 - e}T1620 ${60 - e}" stroke="#ffd36b" stroke-width="12" stroke-linecap="round" stroke-dasharray="0 52" fill="none"/><rect x="140" y="${82 - e}" width="1320" height="${790 + e}" rx="16" fill="#4f406826"/><rect class="bs" x="140" y="${70 - e}" width="1320" height="${790 + e}" rx="16"/><rect class="lv2" x="170" y="${100 - e}" width="1260" height="${760 + e}" rx="8"/><rect x="170" y="${100 - e}" width="1260" height="${760 + e}" rx="8" fill="url(#g)" opacity=".7"/>${b}<g><path class="gr" d="M60 850c-40-50-30-110-10-150 14 50 30 90 10 150zM80 850c0-70 20-120 50-150 6 60-6 110-50 150z"/><path class="pk" d="M40 820h64l-10 50H50z"/></g><g><path class="gr2" d="M1540 850c-40-50-30-110-10-150 14 50 30 90 10 150zM1560 850c0-70 20-120 50-150 6 60-6 110-50 150z"/><path class="yl" d="M1520 820h64l-10 50h-44z"/></g>`;
+  sv.innerHTML = `<rect x="0" y="${-e}" width="1600" height="${900 + e}" fill="url(#w)"/><rect class="fl" y="650" width="1600" height="250"/><path class="pl" d="M0 720h1600M0 790h1600M0 860h1600" fill="none"/><rect class="bs" y="636" width="1600" height="18"/><path d="M-20 ${50 - e}Q400 ${130 - e} 800 ${60 - e}T1620 ${60 - e}" stroke="#ffd36b" stroke-width="12" stroke-linecap="round" stroke-dasharray="0 52" fill="none"/><rect x="140" y="${82 - e}" width="1320" height="${790 + e}" rx="16" fill="#4f406826"/><rect class="bs" x="140" y="${70 - e}" width="1320" height="${790 + e}" rx="16"/><rect class="lv2" x="170" y="${100 - e}" width="1260" height="${760 + e}" rx="8"/><rect x="170" y="${100 - e}" width="1260" height="${760 + e}" rx="8" fill="url(#g)" opacity=".7"/>${b}<g><path class="gr" d="M60 850c-40-50-30-110-10-150 14 50 30 90 10 150zM80 850c0-70 20-120 50-150 6 60-6 110-50 150z"/><path class="pk" d="M40 820h64l-10 50H50z"/></g><g><path class="gr2" d="M1540 850c-40-50-30-110-10-150 14 50 30 90 10 150zM1560 850c0-70 20-120 50-150 6 60-6 110-50 150z"/><path class="yl" d="M1520 820h64l-10 50h-44z"/></g>`;
 }
 function positionFigs() {
   D.shelf.figures.forEach((s) => {
@@ -553,7 +708,7 @@ function toast(msg) {
   toast._t = setTimeout(() => t.classList.remove("on"), 2200);
 }
 function updateBox() {
-  const used = new Set(D.shelf.figures.map((s) => s.fid)),
+  const used = usedIds(),
     owned = D.figures.filter((f) => f.list === "owned"),
     left = owned.filter((f) => !used.has(f.id)).length,
     b = $("#box");
@@ -576,7 +731,7 @@ function updateBox() {
     : "Click to browse the box";
 }
 function randomUnplaced() {
-  const used = new Set(D.shelf.figures.map((s) => s.fid)),
+  const used = usedIds(),
     pool = D.figures.filter((f) => f.list === "owned" && !used.has(f.id));
   return pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
 }
@@ -588,7 +743,7 @@ function boxEmpty() {
   const owned = D.figures.filter((f) => f.list === "owned").length;
   toast(
     owned
-      ? "Every owned figure is already on the shelf."
+      ? "Every owned item is already on display."
       : "Your box is empty. Sync your MFC profile on the computer, or load the sample figures there.",
   );
 }
@@ -601,14 +756,14 @@ function toShelf(cx, cy) {
   const r = room.getBoundingClientRect();
   return {
     x: ((cx - r.left) / r.width) * 1600,
-    y: ((cy - r.top) / r.height) * 900 + vy,
+    y: ((cy - r.top) / r.height) * 900 + (view === 1 ? vy : 0),
   };
 }
 const clampX = (v) => Math.max(0, Math.min(1600, v));
-const clampY = (v) => Math.max(-ext(), Math.min(900, v));
+const clampY = (v) => Math.max(view === 2 ? 0 : -ext(), Math.min(900, v));
 function overBox(x, y) {
   const b = $("#box");
-  if (!right || !b.classList.contains("on")) return false;
+  if (view < 1 || !b.classList.contains("on")) return false;
   const r = b.getBoundingClientRect();
   return (
     x >= r.left - 12 &&
@@ -628,23 +783,15 @@ function startPull(ev, f) {
   const b = $("#box");
   b.classList.add("holding");
   setDragging(true);
-  if (!D.scales[f.id]) D.scales[f.id] = scaleOf(f.id);
   const p = toShelf(ev.clientX, ev.clientY);
-  const s = { fid: f.id, x: clampX(p.x), y: clampY(p.y), scale: 1, row: null };
-  D.shelf.figures.push(s);
+  const s = addPlaced(f, p.x, p.y);
   sel = f.id;
   save();
   render();
   pull = { id: ev.pointerId, s, el: figEl(f.id) };
   if (pull.el) {
     pull.el.style.transition = "none";
-    pull.el.animate(
-      [
-        { transform: "translate(-50%,-100%) scale(.7)", opacity: 0.2 },
-        { transform: "translate(-50%,-100%) scale(1)", opacity: 1 },
-      ],
-      { duration: 180 },
-    );
+    popIn(pull.el);
   }
 }
 function movePull(ev) {
@@ -657,7 +804,7 @@ function movePull(ev) {
   }
 }
 function boxDown(ev) {
-  if (!right || ev.button !== 0) return;
+  if (view < 1 || ev.button !== 0) return;
   ev.preventDefault();
   const b = $("#box");
   if (pull || boxPress) return;
@@ -725,7 +872,7 @@ $("#box").addEventListener("pointerdown", boxDown);
 $("#box").addEventListener("keydown", boxKey);
 
 function boxFigures() {
-  const used = new Set(D.shelf.figures.map((s) => s.fid));
+  const used = usedIds();
   return D.figures.filter((f) => f.list === "owned" && !used.has(f.id));
 }
 function modalOpen() {
@@ -739,13 +886,13 @@ function openBoxModal() {
   b.classList.add("zooming");
   setTimeout(() => {
     b.classList.remove("zooming");
-    if (right && !modalOpen()) showBoxModal();
+    if (view >= 1 && !modalOpen()) showBoxModal();
   }, 260);
 }
 function showBoxModal() {
   const m = $("#boxModal"),
     list = boxFigures();
-  m.innerHTML = `<div class="bk" data-close="1"></div><div class="bm" role="dialog" aria-modal="true" aria-label="Figures in the box"><div class="bmh"><span>My Figures <span class="sub">${list.length ? list.length + " inside · hold and drag one onto the shelf" : "empty"}</span></span><button class="bmx" id="bmx" aria-label="Close the box">✕</button></div><div class="bmg" id="bmg">${list.length ? list.map((f) => `<div class="bmc" data-fid="${esc(f.id)}" role="button" tabindex="0" aria-label="${esc(f.name)}. Hold and drag onto the shelf."><span class="tg">${scaleLabel(scaleOf(f.id))}</span><img alt=""><span class="nm">${esc(f.name)}</span></div>`).join("") : '<p class="bme">Your box is empty.<br>Sync your MFC profile on the computer to fill it, or drag a figure here to put it back.</p>'}</div></div>`;
+  m.innerHTML = `<div class="bk" data-close="1"></div><div class="bm" role="dialog" aria-modal="true" aria-label="Figures in the box"><div class="bmh"><span>My Figures <span class="sub">${list.length ? list.length + " inside · hold and drag one onto the shelf or the wall" : "empty"}</span></span><button class="bmx" id="bmx" aria-label="Close the box">✕</button></div><div class="bmg" id="bmg">${list.length ? list.map((f) => `<div class="bmc" data-fid="${esc(f.id)}" role="button" tabindex="0" aria-label="${esc(f.name)}. Hold and drag onto the shelf."><span class="tg">${scaleLabel(scaleOf(f.id))}</span><img alt=""><span class="nm">${esc(f.name)}</span></div>`).join("") : '<p class="bme">Your box is empty.<br>Sync your MFC profile on the computer to fill it, or drag a figure here to put it back.</p>'}</div></div>`;
   m.classList.add("on");
   m.setAttribute("aria-hidden", "false");
   m.querySelectorAll(".bmc").forEach((c) => {
@@ -805,16 +952,8 @@ function modalMove(ev) {
       modalDrag = null;
       return;
     }
-    if (!D.scales[f.id]) D.scales[f.id] = scaleOf(f.id);
     const p = toShelf(ev.clientX, ev.clientY);
-    const s = {
-      fid: f.id,
-      x: clampX(p.x),
-      y: clampY(p.y),
-      scale: 1,
-      row: null,
-    };
-    D.shelf.figures.push(s);
+    const s = addPlaced(f, p.x, p.y);
     sel = f.id;
     save();
     render();
@@ -822,13 +961,7 @@ function modalMove(ev) {
     modalDrag.el = figEl(f.id);
     if (modalDrag.el) {
       modalDrag.el.style.transition = "none";
-      modalDrag.el.animate(
-        [
-          { transform: "translate(-50%,-100%) scale(.7)", opacity: 0.2 },
-          { transform: "translate(-50%,-100%) scale(1)", opacity: 1 },
-        ],
-        { duration: 180 },
-      );
+      popIn(modalDrag.el);
     }
   }
   const p = toShelf(ev.clientX, ev.clientY);
@@ -850,21 +983,18 @@ function placeFromModal(fid) {
   closeBoxModal();
   const f = fById(fid);
   if (!f) return;
-  if (!D.scales[f.id]) D.scales[f.id] = scaleOf(f.id);
-  const s = {
-    fid: f.id,
-    x: 420 + Math.random() * 760,
-    y: vy + 430,
-    scale: 1,
-    row: null,
-  };
-  D.shelf.figures.push(s);
+  const s = addPlaced(
+    f,
+    420 + Math.random() * 760,
+    view === 2 ? 380 : vy + 430,
+  );
   sel = f.id;
   save();
   render();
   settle(s);
 }
 function settle(s) {
+  if (view === 2) return settleWall(s);
   const el = figEl(s.fid),
     p = landPoint(s.x, s.y);
   s.row = p.row;
@@ -914,12 +1044,14 @@ function render() {
     e.onpointerdown = (ev) => drag(ev, s, e);
     box.appendChild(e);
   });
+  renderWall();
   renderPanel();
   updateBox();
 }
 function renderPanel() {
   const p = $("#panel"),
-    s = sel && D.shelf.figures.find((a) => a.fid === sel);
+    ws = sel && D.wall.items.find((a) => a.fid === sel),
+    s = ws || (sel && D.shelf.figures.find((a) => a.fid === sel));
   if (!s) {
     p.classList.remove("on");
     p.innerHTML = "";
@@ -931,24 +1063,38 @@ function renderPanel() {
     opts = [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 15, 20];
   if (!opts.includes(den)) opts.push(den);
   opts.sort((a, b) => a - b);
-  p.innerHTML = `<b title="${esc(f ? f.name : "Figure")}">${esc(f ? f.name : "Figure")}</b><span class="grp"><label for="pscale">Scale</label><select id="pscale">${opts.map((d) => `<option value="${d}"${d === den ? " selected" : ""}>1/${d}</option>`).join("")}</select></span><span class="grp"><label for="psize">Size ×${(s.scale || 1).toFixed(2)}</label><input id="psize" type="range" min="0.4" max="2.5" step="0.05" value="${s.scale || 1}"></span><button class="b" id="pup">Own image</button>${D.over[sel] ? '<button class="b" id="prs">MFC image</button>' : ""}<button class="b" id="prm">Remove</button>`;
-  $("#pscale").onchange = (e) => {
-    D.scales[sel] = +e.target.value;
-    save();
-    relayout();
-    render();
-  };
-  $("#psize").oninput = (e) => {
-    const n = +e.target.value;
-    s.scale = n;
-    $("#psize").previousElementSibling.textContent = "Size ×" + n.toFixed(2);
-    relayout();
-    save();
-  };
+  const name = `<b title="${esc(f ? f.name : "Item")}">${esc(f ? f.name : "Item")}</b>`,
+    btns = `<button class="b" id="pup">Own image</button>${D.over[sel] ? '<button class="b" id="prs">MFC image</button>' : ""}<button class="b" id="prm">Remove</button>`;
+  if (ws) {
+    p.innerHTML = `${name}<span class="grp"><label for="psize">Size ×${(s.scale || 1).toFixed(2)}</label><input id="psize" type="range" min="0.4" max="2" step="0.05" value="${s.scale || 1}"></span>${btns}`;
+    $("#psize").oninput = (e) => {
+      const n = +e.target.value;
+      s.scale = n;
+      $("#psize").previousElementSibling.textContent = "Size ×" + n.toFixed(2);
+      fitPost(figEl(s.fid), s);
+      save();
+    };
+  } else {
+    p.innerHTML = `${name}<span class="grp"><label for="pscale">Scale</label><select id="pscale">${opts.map((d) => `<option value="${d}"${d === den ? " selected" : ""}>1/${d}</option>`).join("")}</select></span><span class="grp"><label for="psize">Size ×${(s.scale || 1).toFixed(2)}</label><input id="psize" type="range" min="0.4" max="2.5" step="0.05" value="${s.scale || 1}"></span>${btns}`;
+    $("#pscale").onchange = (e) => {
+      D.scales[sel] = +e.target.value;
+      save();
+      relayout();
+      render();
+    };
+    $("#psize").oninput = (e) => {
+      const n = +e.target.value;
+      s.scale = n;
+      $("#psize").previousElementSibling.textContent = "Size ×" + n.toFixed(2);
+      relayout();
+      save();
+    };
+  }
   $("#pup").onclick = () => $("#upl").click();
   if ($("#prs"))
     $("#prs").onclick = () => {
       delete D.over[sel];
+      delete ARC[sel];
       save();
       render();
     };
@@ -964,6 +1110,7 @@ function clearSel() {
 function removeFigure(fid) {
   if (fid == null) return;
   D.shelf.figures = D.shelf.figures.filter((a) => a.fid !== fid);
+  D.wall.items = D.wall.items.filter((a) => a.fid !== fid);
   if (sel === fid) sel = null;
   save();
   relayout();
@@ -971,7 +1118,7 @@ function removeFigure(fid) {
   toast("Figure put back in the box.");
 }
 document.addEventListener("pointerdown", (ev) => {
-  if (!sel || !right) return;
+  if (!sel || view < 1) return;
   if (ev.target.closest(".fig,#panel,#boxModal")) return;
   clearSel();
 });
@@ -990,7 +1137,7 @@ $("#upl").onchange = (e) => {
     c.height = h;
     const x = c.getContext("2d");
     x.drawImage(im, 0, 0, w, h);
-    clearBg(x, w, h);
+    if (!D.wall.items.some((a) => a.fid === id)) clearBg(x, w, h);
     D.over[id] = c.toDataURL("image/png");
     delete ARC[id];
     save();
@@ -1002,6 +1149,7 @@ function drag(ev, s, e) {
   ev.preventDefault();
   lastDown = Date.now();
   sel = s.fid;
+  const wall = e.classList.contains("post");
   document
     .querySelectorAll(".fig")
     .forEach((n) => n.classList.toggle("sel", n === e));
@@ -1011,12 +1159,18 @@ function drag(ev, s, e) {
     sy = ev.clientY,
     ox = s.x,
     oy = s.y;
+  let moved = false;
   e.style.cursor = "grabbing";
   setDragging(true);
   renderPanel();
   e.onpointermove = (m) => {
-    s.x = Math.max(0, Math.min(1600, ox + (m.clientX - sx) * k));
-    s.y = Math.max(-ext(), Math.min(900, oy + (m.clientY - sy) * k));
+    if (wall && !moved) {
+      if (Math.hypot(m.clientX - sx, m.clientY - sy) < 4) return;
+      moved = true;
+      unpin(e, s);
+    }
+    s.x = clampX(ox + (m.clientX - sx) * k);
+    s.y = clampY(oy + (m.clientY - sy) * k);
     e.style.left = s.x / 16 + "%";
     e.style.top = s.y / 9 + "%";
     $("#box").classList.toggle("trash", overBox(m.clientX, m.clientY));
@@ -1027,6 +1181,7 @@ function drag(ev, s, e) {
     $("#box").classList.remove("trash");
     setDragging(false);
     if (ev2 && overBox(ev2.clientX, ev2.clientY)) removeFigure(s.fid);
+    else if (wall && !moved) return;
     else settle(s);
   };
   e.onpointerup = end;
@@ -1034,5 +1189,5 @@ function drag(ev, s, e) {
 }
 drawShelf();
 setV(0);
-go(true);
+go(1);
 if (D.mfc_username) sync().catch(() => {});
